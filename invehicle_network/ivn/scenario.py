@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import queue
+import itertools
 import can
 import carla
 import subprocess
@@ -60,6 +61,7 @@ class Scenario:
         self.cancontrol_flag = True
         self.ids_alert = False
         self.last_ids_time = None
+        self._pq_counter = itertools.count()  # unique tiebreaker so equal-priority CAN frames never compare Message objects
     
 
     def setup_common_environment(self):
@@ -212,11 +214,11 @@ class Scenario:
         process_finish = True
         while not self.temp_queue_vcan0.empty() and process_finish == True:
             msg = self.temp_queue_vcan0.get()
-            self.priority_queue_vcan0.put(msg)
+            self.priority_queue_vcan0.put((msg[0], msg[1], next(self._pq_counter), msg[2]))
             if (self.priority_queue_vcan0.qsize() > 5):
                 process_finish = False
         while not self.priority_queue_vcan0.empty():
-            _, _, message = self.priority_queue_vcan0.get()
+            _, _, _, message = self.priority_queue_vcan0.get()
             if(self.priority_queue_vcan0.empty()):
                 process_finish = True   
                 

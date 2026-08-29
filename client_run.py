@@ -193,11 +193,11 @@ def game_loop(args, filename, scenario):
             agent = BehaviorAgent(world.player, behavior=args.behavior)
 
         ###VEL_Set the spawnpoint based on the argument that user input
+        spawn_points = world.map.get_spawn_points()  # always defined (needed by --loop reroute)
         if world.end_pos:
             destination = world.end_pos.location
             agent.set_destination(destination)
         else:
-            spawn_points = world.map.get_spawn_points()
             destination = random.choice(spawn_points).location
             agent.set_destination(destination)
 

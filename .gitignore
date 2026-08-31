@@ -23,3 +23,6 @@ attack_events.csv
 ids_attack_events.csv
 data_store.pkl
 
+# Camera experiment outputs (videos, logs)
+camera/output/
+

@@ -240,7 +240,7 @@ def main():
     # ------------------------------------------------------------
     # CARLA WORLD AND VEHICLE SETUP
     # ------------------------------------------------------------
-    client = carla.Client("192.168.160.1", 2000)
+    client = carla.Client("127.0.0.1", 2000)
     client.set_timeout(200.0)
     world = client.get_world()
     bp_lib = world.get_blueprint_library()

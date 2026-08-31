@@ -455,9 +455,9 @@ def main():
             # ------------------------------------------------------------
             current_time = time.time() - start_time
             #degrade_start = 50.0
-            degrade_start = 0.0
+            degrade_start = 10.0
             #degrade_duration = 1000.0
-            degrade_duration = 0.0
+            degrade_duration = 30.0
             degrade_end = degrade_start + degrade_duration
 
             if not degrade_started and current_time >= degrade_start:

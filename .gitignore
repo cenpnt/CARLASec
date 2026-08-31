@@ -14,6 +14,12 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Local runtime artifacts (uncomment if you do not want these tracked)
-# *.log
-# data_store.pkl
+# Simulation runtime outputs (regenerated every run)
+benign_1_*.txt
+can_sniff_log.csv
+response/ids_alert_log.csv
+forward_log.csv
+attack_events.csv
+ids_attack_events.csv
+data_store.pkl
+

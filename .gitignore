@@ -28,4 +28,5 @@ camera/output/
 camera/dataset/
 camera/adversarial/data/
 camera/adversarial/*.pt
+camera/adversarial/*.png
 

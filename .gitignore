@@ -30,3 +30,6 @@ camera/adversarial/data/
 camera/adversarial/*.pt
 camera/adversarial/*.png
 
+# Generated figures (reproducible from the make_*.py scripts)
+camera/xai/figures/
+

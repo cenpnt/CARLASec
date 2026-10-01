@@ -33,3 +33,7 @@ camera/adversarial/*.png
 # Generated figures (reproducible from the make_*.py scripts)
 camera/xai/figures/
 
+
+# Generated caches (surrogate features, GeoDA DCT basis)
+camera/xai/_surrogate_cache.npz
+camera/xai/2d_dct_basis_*.npy

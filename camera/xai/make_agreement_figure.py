@@ -1,7 +1,5 @@
-"""Figure 5: one sign clean, under a plain CW attack, and under the
-detector-blind agreement attack, with all three attribution maps and the
-detectors' verdicts. Both attacks use `disagree_attack` with the same budget.
-The example is selected (plain caught, agreement missed), not representative.
+"""Figure 5: one sign clean, under a plain attack and under the agreement
+attack, with all three attribution maps and the detectors' verdicts.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe -u make_agreement_figure.py

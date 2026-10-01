@@ -1,13 +1,5 @@
-"""White-box attack on the OR-composition of the pixel and XAI detectors.
-
-Each detector score is put in threshold-relative units, u <= 0 meaning "not
-flagged", and the attack minimises a soft maximum of the two, since the OR
-fires if either does:
-
-    objective = L_CW + lambda * T * logsumexp([u_pixel, u_xai] / T)
-
-The detectors are the differentiable surrogates from `surrogate_study`.
-"""
+"""White-box attack on the OR of the pixel and XAI detectors: minimises a soft
+maximum of the two threshold-relative detector scores."""
 import numpy as np
 import torch
 

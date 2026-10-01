@@ -1,22 +1,5 @@
-"""Confirmation run for the low-frequency result, with a STRONGER attack.
-
-The sweep found one cell (k=3, eps=0.03) where XAI beat the pixel baseline
-0.9514 vs 0.8374, with a clean monotone mechanism behind it: as the attack gets
-smoother, the pixel baseline degrades and XAI does not. Two problems with that
-evidence:
-
-  1. only ~180 successful attacks at that cell, so the AUC interval is wide
-  2. 9% attack success is too weak to be a real threat
-
-This script fixes both:
-
-  STRONGER ATTACK. Cross-entropy saturates once a sample is misclassified and
-  gives poor gradients near the boundary, so we switch to a CW-style margin
-  loss (push the true logit below the best other logit), add random restarts,
-  more steps, and a cosine LR schedule.
-
-  ERROR BARS. Each configuration is scored over several train/test splits and
-  reported as mean +/- std, so a lucky split cannot masquerade as a result.
+"""Low-frequency attack (CW margin, restarts) scored against the XAI and pixel
+detectors over several splits.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe lowfreq_confirm.py
@@ -46,11 +29,8 @@ N_SEEDS = 5
 
 
 def lowfreq_strong(model, x, y, eps, k, steps=300, restarts=2, lr=0.15, bs=256):
-    """Smooth untargeted attack using a CW-style margin loss.
-
-    The perturbation is a k x k tensor upsampled to image size, so it is
-    low-frequency by construction and carries almost no Laplacian signature.
-    """
+    """Untargeted CW-margin attack with a k x k perturbation upsampled to
+    image size."""
     out = []
     for i in range(0, len(x), bs):
         xb = x[i:i + bs].to(DEVICE)

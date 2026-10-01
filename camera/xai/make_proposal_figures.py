@@ -1,9 +1,4 @@
-"""Architecture diagram and Gantt chart for the project proposal.
-
-Dr Kim's proposal guidance asks for the proposed approach to be explained with a
-figure showing the proposed architecture, and for the plan to be shown as a
-Gantt-style chart. Both are generated here as PNGs for inclusion in the LaTeX
-proposal.
+"""Architecture diagram and Gantt chart for the proposal.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe make_proposal_figures.py

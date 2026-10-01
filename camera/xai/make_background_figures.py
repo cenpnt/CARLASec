@@ -1,20 +1,5 @@
-"""Figures for the Background chapter of the proposal.
-
-Two figures, both generated from this project's own model and data rather than
-reproduced from a paper:
-
-  fig_adversarial_examples.png
-      A single GTSRB sign under FGSM at three budgets, with the model's own
-      prediction and confidence, and the corresponding perturbations below.
-      Illustrates Equation (2.1) and the epsilon tension: the perturbation
-      that is easy to see is also easy to detect, and the one that is stealthy
-      still flips a confident prediction.
-
-  fig_attribution_methods.png
-      Integrated Gradients, Input x Gradient and Saliency on the same clean
-      decision. The three disagree, which is what the disagreement feature
-      family in the detector is built on, and is also visible evidence for the
-      Adebayo et al. caution about edge-detector-like behaviour.
+"""Background figures: one sign under FGSM at three budgets, and the three
+attribution methods on one clean decision.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe -u make_background_figures.py
@@ -65,11 +50,7 @@ def laplacian_energy(img):
 
 
 def pick_sample(model, clf, ds):
-    """A confidently correct sample of a preferred class that FGSM actually flips.
-
-    A figure illustrating adversarial examples is worthless if the prediction
-    never changes, so success at the largest budget is a selection criterion.
-    """
+    """A confidently correct sample of a preferred class that FGSM flips."""
     atk = FastGradientMethod(estimator=clf, eps=EPS[-1], norm=np.inf)
     for want in PREFERRED:
         idx = [i for i in range(len(ds)) if ds._samples[i][1] == want]

@@ -1,17 +1,5 @@
-"""Control experiment: is the XAI actually doing the work?
-
-FGSM perturbs every pixel, so an attacked image is measurably noisier than a
-clean one. An attribution map computed on a noisy image inherits that noise.
-The XAI detector may therefore be an expensive noise meter rather than a probe
-of the model's reasoning.
-
-This script trains the SAME detector on three feature sets and compares them:
-
-  IMAGE : plain noise statistics of the raw image (no model, no gradients)
-  XAI   : attribution-map features only (as in xai_detect.py)
-  BOTH  : concatenation, to see whether XAI adds anything on top of IMAGE
-
-If IMAGE alone matches XAI, the explainability framing is not supported.
+"""Pixel-statistics control: the same detector trained on raw-image noise
+features, XAI features, and both.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe control_baseline.py

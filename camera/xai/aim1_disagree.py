@@ -1,12 +1,6 @@
 """Agreement attack: fool the classifier while keeping the pairwise agreement
-between the three attribution methods (IG, IxG, Saliency) at its clean value.
-
-    min_z  L_CW(f(x+delta), y)
-           + lambda_det * u_xai(x+delta)                 optional, needs detector
-           + lambda_dis * || d(x+delta) - d(x) ||^2
-    delta = eps * tanh(U_k(z)),   d = pairwise Pearson and cosine agreements
-
-With lambda_det = 0 the attack never queries the detector.
+between IG, IxG and Saliency at its clean value. With lam_det = 0 it never
+queries the detector.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe -u aim1_disagree.py

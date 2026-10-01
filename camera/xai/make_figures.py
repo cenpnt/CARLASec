@@ -1,14 +1,5 @@
-"""Figures for the thesis: what the attacks look like and why the baseline fails.
-
-Figure 1  attack comparison. Rows: clean, FGSM, low-frequency. Columns: the
-          image, the perturbation amplified, the perturbation's Laplacian (what
-          the pixel baseline actually measures), and the Integrated Gradients
-          attribution (what the XAI detector measures).
-          The point: both attacks fool the model and look clean, but only FGSM
-          leaves a Laplacian signature. The attribution changes for both.
-
-Figure 2  the data and the patch: sample GTSRB images the classifier was
-          trained on, plus the learned adversarial patch.
+"""Figure 1 (clean, FGSM and low-frequency attacks with their roughness and IG
+maps) and Figure 2 (sample GTSRB images and the adversarial patch).
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe make_figures.py
@@ -109,10 +100,7 @@ def main():
         a = ig.attribute(xb, target=int(prob.argmax()), n_steps=48)[0].detach().cpu()
         rows.append((tag, img, a, prob, img - Xp[j]))
 
-    # One colour scale for both roughness panels. Left to autoscale, each panel
-    # is stretched to its own maximum and the two cannot be compared by eye:
-    # the smooth row looks busy because a handful of clipping pixels set its
-    # ceiling, which understates a difference of two orders of magnitude.
+    # shared colour scale so the two roughness panels are comparable
     lap_max = max(lap(rw[4]).max().item() for rw in rows[1:])
 
     fig, ax = plt.subplots(3, 4, figsize=(13.5, 10))

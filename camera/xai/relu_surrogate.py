@@ -1,24 +1,5 @@
-"""Surrogates for the ReLU derivative, so attribution maps have usable
-gradients with respect to the input.
-
-An attribution map is built from dF/dx, so differentiating it needs the
-network's second derivative, which is zero almost everywhere for ReLU. ADV^2
-(Zhang et al., USENIX Security 2020, section 3.2) keep the exact ReLU forward
-and replace its derivative in the backward pass with a smoothed step.
-
-  "adv2"          exact relu forward, smoothed-step backward. Default.
-  "adv2-literal"  the paper's printed two-branch formula, for comparison.
-  "softplus"      softplus_beta both ways (Dombrowski et al., NeurIPS 2019).
-  "relu"          unmodified, the negative control.
-
-The paper's printed two-branch h(z) is discontinuous at z = 0, which does not
-match their Figure 3. The derivative of the smooth relu (z + sqrt(z^2+tau))/2,
-
-    h(z) = (1 + z / sqrt(z^2 + tau)) / 2,
-
-matches both the figure and the stated property, so that is the default.
-Attack success is always measured on the unmodified model.
-"""
+"""ReLU surrogates from ADV^2 (Zhang et al. 2020): exact ReLU forward, smoothed
+derivative backward, so gradients can flow through attribution maps."""
 import torch
 import torch.nn as nn
 

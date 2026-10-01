@@ -1,10 +1,5 @@
-"""Shared model definition for the XAI adversarial-detection pipeline.
-
-The ImageNet normalisation is folded INTO the model as a buffer so that the
-network's external interface is plain [0,1] pixel space. ART and the attribution
-methods can then operate on real images with clip_values=(0,1), and the
-perturbation budget epsilon keeps its natural interpretation in image units.
-"""
+"""Sign classifier. ImageNet normalisation is inside the model, so inputs are
+plain [0,1] pixels."""
 import torch
 import torch.nn as nn
 import timm

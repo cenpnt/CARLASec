@@ -1,7 +1,5 @@
-"""Checks that attribution maps have a usable gradient under each ReLU surrogate:
-  1. the "adv2" surrogate leaves the forward pass unchanged
-  2. the hand-rolled maps in attrib_diff match Captum
-  3. ||dD/dz|| per attribution method and surrogate, against plain ReLU
+"""Checks the ReLU surrogates: forward pass unchanged, maps match Captum, and
+the attribution gradient is usable.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe test_surrogate.py
@@ -159,9 +157,7 @@ def main():
     print("=" * 72)
     print("VERDICT")
     print("=" * 72)
-    # Usable: clear of numerical noise and at least 2x plain ReLU. IxG and IG
-    # keep a first-order path through their input factor, so their ratios are
-    # modest; Saliency's is infinite because plain ReLU gives exactly zero.
+    # usable: clear of numerical noise and at least 2x plain ReLU
     usable = {}
     for name in ["sal", "ixg", "ig"]:
         g_adv2, g_relu = verdict.get((name, "adv2"), (0.0, 0.0))

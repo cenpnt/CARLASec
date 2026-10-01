@@ -1,8 +1,5 @@
-"""Is the XAI detector reading high-frequency aliasing in the attribution maps?
-
-Low-pass filters the maps at decreasing cutoffs (after FORGrad, Muzellec et al.
-ICML 2024) and reports detector AUC with all 54 features, without the total
-variation features, with them alone, and with the nine agreement features alone.
+"""Detector AUC after low-pass filtering the attribution maps, plus a
+feature-group ablation.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe -u xai_band_ablation.py
@@ -20,9 +17,7 @@ from model import load_trained, IMG_SIZE
 from xai_detect import map_features, disagreement_features, CKPT, DEVICE
 from aim1_attack import attack as smooth_attack, predict, load_data
 
-# Per-method feature layout in xai_detect.map_features (15 per method):
-#   0 log total, 1 mean, 2 std, 3 max, 4 entropy, 5 top1%, 6 top5%, 7 top20%,
-#   8 tv, 9 tv_h, 10 tv_w, 11 centre, 12 pos_frac, 13 signed mean, 14 signed sd
+# indices 8-10 of each method's 15 features are the total variation terms
 TV_IDX_PER_METHOD = [8, 9, 10]
 N_PER_METHOD = 15
 N_METHODS = 3

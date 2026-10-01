@@ -1,12 +1,7 @@
-"""Differentiable versions of the XAI detector's 54 features.
+"""Differentiable versions of the XAI detector's 54 features. Run it to check
+them, and the pixel mirror, against the numpy versions.
 
-Same computations as `xai_detect.map_features` and `disagreement_features`,
-with the autograd graph kept so an attack can optimise what the detector reads.
-
-Four features carry no gradient: `pos_frac` (a step function) and the three
-top-10% IoU terms (boolean masks). They stay in the vector so the layout matches.
-
-Run to check both feature mirrors against the numpy versions:
+Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe feat_diff.py
 """
 import numpy as np

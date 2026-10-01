@@ -1,8 +1,5 @@
-"""Headline table: every attack against the same detectors, images and protocol.
-
-Evasion = misclassified AND unflagged, measured on the gradient-boosted trees
-at 5% and 8.4% clean FPR, for the XAI detector, the pixel detector, and their
-OR-composition. The last row scores each image by the strongest attack.
+"""Headline table: evasion of every attack against the XAI, pixel and OR
+detectors at 5% and 8.4% clean FPR.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe -u aim1_headline.py

@@ -1,8 +1,4 @@
-"""Fine-tune a pretrained backbone on GTSRB to state-of-the-art accuracy.
-
-Replaces the earlier 32x32 prototype CNN (94.2%). Target is >99% clean test
-accuracy, which is the level a deployed sign reader would be expected to reach
-and the level at which attack/defence results become representative.
+"""Fine-tune a pretrained backbone on GTSRB.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe train_sota.py

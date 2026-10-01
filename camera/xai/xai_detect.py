@@ -1,16 +1,5 @@
-"""XAI-only detection of FGSM adversarial examples on a SOTA GTSRB classifier.
-
-Attacks come from ART (reference implementations). Every detector feature is
-derived from attribution maps produced by input-level explanation methods:
-Integrated Gradients, Input x Gradient and Saliency. No softmax confidence, no
-prediction-stability / feature-squeezing cue, and no Grad-CAM. If the detector
-works, the signal is attributable to explainability alone.
-
-Two feature families, matching the proposal:
-  1. per-method attribution statistics (mass, dispersion, entropy, total
-     variation, spatial concentration)
-  2. cross-method disagreement (correlation, cosine, top-k overlap between the
-     attributions that different methods give for the SAME decision)
+"""XAI detector: 54 features from IG, IxG and Saliency maps (15 statistics per
+method plus 9 cross-method agreement measures) fed to a gradient-boosted tree.
 
 Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe xai_detect.py
@@ -42,15 +31,8 @@ CKPT = os.path.join(WORK, "gtsrb_sota.pt")
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# --------------------------------------------------------------------------
-# attribution -> feature vector
-# --------------------------------------------------------------------------
 def map_features(attr):
-    """Summary statistics of one batch of attribution maps.
-
-    attr: (B,3,H,W) tensor. Returns (B,F) numpy array.
-    All features are shape/scale descriptors of the attribution map itself.
-    """
+    """15 summary statistics per map. attr (B,3,H,W) -> (B,15) numpy."""
     a = attr.abs().sum(1)                      # (B,H,W) magnitude per pixel
     B, H, W = a.shape
     flat = a.reshape(B, -1)
@@ -89,10 +71,7 @@ def map_features(attr):
 
 
 def disagreement_features(maps):
-    """Cross-method disagreement between attribution maps of the same decision.
-
-    maps: dict name -> (B,3,H,W). Returns (B,F) numpy array.
-    """
+    """Pairwise agreement between methods. maps {name: (B,3,H,W)} -> (B,9)."""
     names = sorted(maps)
     mags = {n: maps[n].abs().sum(1).flatten(1) for n in names}   # (B,HW)
     out = []
@@ -118,11 +97,8 @@ def disagreement_features(maps):
 
 # --------------------------------------------------------------------------
 def attribute_all(model, x, target, batch=64):
-    """Compute all attribution methods for x w.r.t. the PREDICTED class.
-
-    The true label is unavailable at runtime, so attributions must be taken
-    against the model's own prediction.
-    """
+    """All three maps and the 54 features, taken against `target` (the
+    predicted class at runtime)."""
     ig = IntegratedGradients(model)
     ixg = InputXGradient(model)
     sal = Saliency(model)
@@ -211,12 +187,7 @@ def main():
 
         F_adv, _ = attribute_all(model, Xadv[idx], adv_pred[idx])
 
-        # MATCHED PAIRS. The clean side is restricted to exactly the same source
-        # images that the attack succeeded on. Comparing all 3000 clean images
-        # against only the successfully-attacked subset would let the detector
-        # learn "this image is intrinsically hard to classify" instead of "this
-        # image has been attacked", and would also leave the classes imbalanced
-        # enough to make plain accuracy meaningless.
+        # clean side restricted to the same images the attack succeeded on
         ix = idx.numpy()
         Fx = np.concatenate([F_clean[ix], F_adv])
         lab = np.concatenate([np.zeros(len(ix)), np.ones(len(F_adv))])

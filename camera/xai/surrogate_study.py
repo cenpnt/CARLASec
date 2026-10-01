@@ -1,18 +1,7 @@
-"""Differentiable surrogate for the gradient-boosted tree detectors, and the
-study that selected it.
+"""Differentiable MLP stand-in for the tree detectors, and the study that chose
+its settings (BEST).
 
-Candidates are scored on three fidelity measures against the tree:
-  AUC        discriminative power
-  spearman   rank agreement with the tree's score
-  agree@5%   same flag decision as the tree at a 5% clean FPR
-
-Selected (2026-09-19): label targets, rank transform, 256 hidden, depth 4,
-4000 epochs. Distillation on the tree's probabilities did not help, because
-the trees separate the training set perfectly and their probabilities
-saturate. The rank transform gives the MLP a tree's invariance to monotone
-feature transforms.
-
-Run the study (features are cached after the first run):
+Run:
     C:\\Users\\s4990998\\xai-venv\\Scripts\\python.exe -u surrogate_study.py
 """
 import argparse

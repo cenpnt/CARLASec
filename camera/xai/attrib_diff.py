@@ -1,13 +1,5 @@
-"""Differentiable attribution maps for use inside an attack loop.
-
-Captum (in `xai_detect`) stays the reference for evaluation. These versions
-exist because an attack must back-propagate through the map, which needs every
-gradient call made with create_graph=True. `test_surrogate.py` checks them
-against Captum.
-
-`target` is always explicit: at runtime the detector attributes against the
-model's own prediction, so for an adversarial input that is the wrong class.
-"""
+"""Attribution maps an attack can backpropagate through (create_graph=True).
+Captum in `xai_detect` remains the reference for evaluation."""
 import torch
 
 __all__ = ["saliency", "input_x_grad", "integrated_grad", "ATTRIB",

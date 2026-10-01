@@ -1,11 +1,5 @@
-"""Attribution-aligned attack (ADV^2-style) and shared attack utilities.
-
-    min_z  L_CW(f(x + delta), y)  +  lambda * ||Sal(x + delta) - Sal(x)||_1
-    delta = eps * tanh(U_k(z)),        z of shape (B, 3, k, k)
-
-With lambda = 0 this is a plain CW attack, used to build detector training
-sets. With k < 96 the perturbation is restricted to a smooth k x k code.
-"""
+"""ADV^2-style attack (CW loss plus Saliency map distance) and shared attack
+utilities. With lam = 0 it is a plain CW attack."""
 import torch
 import torch.nn.functional as Fn
 from torch.utils.data import DataLoader
@@ -35,12 +29,8 @@ def upsample(z, size):
 
 def attack(model, x, y, eps, k, lam, steps=150, lr=0.08, kappa=0.0, bs=128,
            warm=0.4):
-    """Returns adversarial images on CPU. `model` needs the ReLU surrogate
-    swapped in when lam > 0, otherwise the attribution term has no gradient.
-
-    Two-phase schedule, after ADV^2 section 3.5: the first `warm` fraction of
-    steps only attacks the classifier; the attribution term is added after.
-    """
+    """Returns adversarial images on CPU. Needs the ReLU surrogate when lam > 0.
+    The map term switches on after the first `warm` fraction of steps."""
     warm_steps = int(warm * steps)
     out = []
 

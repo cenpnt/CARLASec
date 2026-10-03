@@ -35,6 +35,37 @@ class _SurrogateReLUFn(torch.autograd.Function):
         return grad_out * h(z, ctx.tau), None, None
 
 
+class _ExactValueReLUFn(torch.autograd.Function):
+    """relu forward; backward returns the TRUE relu derivative as its value,
+    but differentiates through the smoothed step. Attribution maps then equal
+    the real ones, while still having a non-zero gradient."""
+
+    @staticmethod
+    def forward(ctx, z, tau):
+        ctx.save_for_backward(z)
+        ctx.tau = tau
+        return z.clamp(min=0)
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        (z,) = ctx.saved_tensors
+        h = h_adv2(z, ctx.tau)
+        step = (z > 0).to(z.dtype)
+        return grad_out * step + grad_out.detach() * (h - h.detach()), None
+
+
+class ExactValueReLU(nn.Module):
+    def __init__(self, tau=TAU):
+        super().__init__()
+        self.tau = tau
+
+    def forward(self, z):
+        return _ExactValueReLUFn.apply(z, self.tau)
+
+    def extra_repr(self):
+        return f"tau={self.tau}, exact value"
+
+
 class SurrogateReLU(nn.Module):
     """Drop-in nn.ReLU replacement with a twice-differentiable backward."""
 
@@ -69,6 +100,8 @@ def _make(kind, tau=TAU, beta=50.0):
         return SurrogateReLU(tau=tau, literal=False)
     if kind == "adv2-literal":
         return SurrogateReLU(tau=tau, literal=True)
+    if kind == "adv2-exact":
+        return ExactValueReLU(tau=tau)
     if kind == "softplus":
         return SoftplusReLU(beta=beta)
     raise ValueError(f"unknown surrogate kind: {kind!r}")
@@ -95,6 +128,6 @@ def count_relu(model):
     for m in model.modules():
         if isinstance(m, nn.ReLU):
             relu += 1
-        elif isinstance(m, (SurrogateReLU, SoftplusReLU)):
+        elif isinstance(m, (SurrogateReLU, SoftplusReLU, ExactValueReLU)):
             surrogate += 1
     return relu, surrogate

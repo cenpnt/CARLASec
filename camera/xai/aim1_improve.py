@@ -97,10 +97,82 @@ def stealth_terms(model, x_adv, tgt, ref, w, sd_x, sd_p):
     return term
 
 
+def edge_weights(x, mode):
+    """AdvEdge step weights, as in the authors' notebook: skimage.filters.sobel
+    on the grayscale image ("soft"), or 1 where it exceeds 0.1 ("bin", AdvEdge+)."""
+    g = torch.nn.functional.pad(x.mean(1, keepdim=True), (1, 1, 1, 1),
+                                mode="reflect")
+    kh = torch.tensor([[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]],
+                      device=x.device).view(1, 1, 3, 3) / 4
+    gh = torch.nn.functional.conv2d(g, kh)
+    gv = torch.nn.functional.conv2d(g, kh.transpose(2, 3))
+    e = ((gh ** 2 + gv ** 2) / 2).sqrt()
+    return (e > 0.1).float() if mode == "bin" else e
+
+
+def clean_refs(model, xb, yb):
+    """Clean-image references for the stealth terms."""
+    with torch.enable_grad():
+        m0 = all_maps(model, xb.clone(), yb, create_graph=False)
+        return {"mag": {k: magnitude(v).detach() for k, v in m0.items()},
+                "fx": xai_fingerprint(m0).detach(),
+                "fp": pixel_features_t(xb)[:, PIX_LIVE].detach()}
+
+
+def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
+               steps=200, alpha=1 / 255, kappa=2.0, bs=64):
+    """ADV2 / AdvEdge with the authors' PGD procedure: `pre_steps` sign steps on
+    the classifier loss, weighted by the edge map if `edge` is set, then `steps`
+    unweighted sign steps on classifier loss plus stealth terms. Keeps the
+    misclassified iterate with the lowest stealth term."""
+    out = []
+    for i in range(0, len(x), bs):
+        xb = x[i:i + bs].to(DEVICE)
+        yb = y[i:i + bs].to(DEVICE)
+        n = len(xb)
+        E = edge_weights(xb, edge) if edge else 1.0
+        ref = clean_refs(model, xb, yb)
+        xa = xb.clone()
+
+        def project(v):
+            return (xb + (v - xb).clamp(-eps, eps)).clamp(0, 1)
+
+        for _ in range(pre_steps):
+            xa.requires_grad_(True)
+            loss = cw_margin(model(xa), yb, kappa).sum()
+            g, = torch.autograd.grad(loss, xa)
+            xa = project(xa.detach() - E * alpha * g.sign())
+
+        best_x = xa.detach().clone()
+        best = torch.full((n,), float("inf"), device=DEVICE)
+        for _ in range(steps):
+            xa.requires_grad_(True)
+            logits = model(xa)
+            term = stealth_terms(model, xa, logits.argmax(1).detach(), ref, w,
+                                 sd_x, sd_p)
+            loss = cw_margin(logits, yb, kappa).sum() + term.sum()
+            g, = torch.autograd.grad(loss, xa)
+            with torch.no_grad():
+                mis = logits.argmax(1) != yb
+                cand = torch.where(mis, term.detach(),
+                                   torch.full_like(best, float("inf")))
+                better = cand < best
+                best = torch.where(better, cand, best)
+                best_x[better] = xa.detach()[better]
+            xa = project(xa.detach() - alpha * g.sign())
+        with torch.no_grad():
+            never = torch.isinf(best)
+            best_x[never] = xa.detach()[never]
+        out.append(best_x.cpu())
+    return torch.cat(out)
+
+
 def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
-                 kappa=2.0, bs=64, warm=0.4, restarts=2, seed=0):
+                 kappa=2.0, bs=64, warm=0.4, restarts=2, seed=0,
+                 keep_best=True):
     """CW margin plus the weighted stealth terms. Never queries a detector:
-    candidates are ranked by the attack's own objective."""
+    candidates are ranked by the attack's own objective. keep_best=False
+    returns the final iterate of the last restart instead (ablation)."""
     warm_steps = int(warm * steps)
     active = any(v > 0 for v in w.values())
     out = []
@@ -108,12 +180,7 @@ def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
         xb = x[i:i + bs].to(DEVICE)
         yb = y[i:i + bs].to(DEVICE)
         H, n = xb.shape[-1], len(xb)
-
-        with torch.enable_grad():
-            m0 = all_maps(model, xb.clone(), yb, create_graph=False)
-            ref = {"mag": {k: magnitude(v).detach() for k, v in m0.items()},
-                   "fx": xai_fingerprint(m0).detach(),
-                   "fp": pixel_features_t(xb)[:, PIX_LIVE].detach()}
+        ref = clean_refs(model, xb, yb)
 
         best_z = torch.zeros(n, 3, H, H, device=DEVICE)
         best = torch.full((n,), float("inf"), device=DEVICE)
@@ -156,6 +223,8 @@ def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
                 if (~seen).any():
                     best_z[~seen] = z.detach()[~seen]
 
+        if not keep_best:
+            best_z = z.detach()
         with torch.no_grad():
             out.append((xb + eps * torch.tanh(best_z)).clamp(0, 1).cpu())
     return torch.cat(out)
@@ -173,6 +242,10 @@ CONFIGS = {
     "ADV2-all + agree6":     {"adv2_all": 10.0, "agree6raw": 1.0},
     "ADV2-all + pix":        {"adv2_all": 10.0, "pix": 1.0},
     "ADV2-all + XAI + pix":  {"adv2_all": 10.0, "xai": 1.0, "pix": 1.0},
+    # the authors' PGD procedure (pgd_attack); "pgd" names the phase-1 edge mode
+    "PGD ADV2 (3 maps)":     {"adv2_all": 10.0, "pgd": None},
+    "PGD AdvEdge (3 maps)":  {"adv2_all": 10.0, "pgd": "soft"},
+    "PGD AdvEdge+ (3 maps)": {"adv2_all": 10.0, "pgd": "bin"},
 }
 
 
@@ -187,18 +260,24 @@ def main():
     ap.add_argument("--only", nargs="*", default=None,
                     help="substrings of config names to run")
     ap.add_argument("--seed", type=int, default=0, help="image sample and split")
+    ap.add_argument("--surrogate", default="adv2", choices=["adv2", "adv2-exact"])
+    ap.add_argument("--no-best", action="store_true",
+                    help="return the final iterate, not the best one")
+    ap.add_argument("--pgd-steps", type=int, default=200,
+                    help="phase-2 steps of the PGD procedure")
     args = ap.parse_args()
 
     plain, ckpt = load_trained(CKPT, DEVICE)
     img_size = ckpt.get("img_size", IMG_SIZE)
     surro, _ = load_trained(CKPT, DEVICE)
-    swap_relu(surro, kind="adv2")
+    swap_relu(surro, kind=args.surrogate)
 
     X, Y = load_data(plain, img_size, args.n, seed=args.seed)
     ntr = len(X) // 2
     Xtr, Ytr, Xte, Yte = X[:ntr], Y[:ntr], X[ntr:], Y[ntr:]
     print(f"{len(Xtr)} detector-train / {len(Xte)} attack-eval, eps={args.eps}, "
-          f"steps={args.steps}, restarts={args.restarts}\n", flush=True)
+          f"steps={args.steps}, restarts={args.restarts}, "
+          f"surrogate={args.surrogate}\n", flush=True)
 
     # detectors: same recipe as aim1_headline
     clf = PyTorchClassifier(model=plain, loss=nn.CrossEntropyLoss(),
@@ -238,10 +317,19 @@ def main():
     for name, w in CONFIGS.items():
         if args.only and not any(s in name for s in args.only):
             continue
+        w = dict(w)
+        use_pgd = "pgd" in w
+        edge = w.pop("pgd", None)
         for lam in (args.lam if w else [0.0]):
-            A = blind_attack(surro, Xte, Yte, args.eps,
-                             {k: v * lam for k, v in w.items()}, sd_x, sd_p,
-                             steps=args.steps, restarts=args.restarts).float()
+            ws = {k: v * lam for k, v in w.items()}
+            if use_pgd:
+                A = pgd_attack(surro, Xte, Yte, args.eps, ws, sd_x, sd_p,
+                               edge=edge, steps=args.pgd_steps).float()
+            else:
+                A = blind_attack(surro, Xte, Yte, args.eps, ws, sd_x, sd_p,
+                                 steps=args.steps,
+                                 restarts=args.restarts,
+                                 keep_best=not args.no_best).float()
             pa = predict(plain, A)
             mis = (pa != Yte).numpy()
             sx = tree_x.predict_proba(xai_feats(plain, A, pa))[:, 1]

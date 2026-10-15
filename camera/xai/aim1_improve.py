@@ -120,11 +120,12 @@ def clean_refs(model, xb, yb):
 
 
 def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
-               steps=200, alpha=1 / 255, kappa=2.0, bs=64):
+               steps=200, alpha=1 / 255, kappa=2.0, bs=64, trace=None):
     """ADV2 / AdvEdge with the authors' PGD procedure: `pre_steps` sign steps on
     the classifier loss, weighted by the edge map if `edge` is set, then `steps`
     unweighted sign steps on classifier loss plus stealth terms. Keeps the
-    misclassified iterate with the lowest stealth term."""
+    misclassified iterate with the lowest stealth term. `trace`, if a list,
+    collects the mean stealth term of each phase-2 step (first batch)."""
     out = []
     for i in range(0, len(x), bs):
         xb = x[i:i + bs].to(DEVICE)
@@ -151,6 +152,8 @@ def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
             term = stealth_terms(model, xa, logits.argmax(1).detach(), ref, w,
                                  sd_x, sd_p)
             loss = cw_margin(logits, yb, kappa).sum() + term.sum()
+            if trace is not None and i == 0:
+                trace.append(term.mean().item())
             g, = torch.autograd.grad(loss, xa)
             with torch.no_grad():
                 mis = logits.argmax(1) != yb
@@ -169,10 +172,11 @@ def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
 
 def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
                  kappa=2.0, bs=64, warm=0.4, restarts=2, seed=0,
-                 keep_best=True):
+                 keep_best=True, trace=None):
     """CW margin plus the weighted stealth terms. Never queries a detector:
     candidates are ranked by the attack's own objective. keep_best=False
-    returns the final iterate of the last restart instead (ablation)."""
+    returns the final iterate of the last restart instead (ablation). `trace`,
+    if a list, collects the mean stealth term per step (first batch and restart)."""
     warm_steps = int(warm * steps)
     active = any(v > 0 for v in w.values())
     out = []
@@ -204,6 +208,8 @@ def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
                                          ref, w, sd_x, sd_p)
                     loss = loss + term.sum()
                     rank = term.detach()
+                    if trace is not None and i == 0 and r == 0:
+                        trace.append(term.mean().item())
 
                 with torch.no_grad():
                     mis = logits.argmax(1) != yb

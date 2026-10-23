@@ -18,6 +18,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 
 from model import load_trained, IMG_SIZE, NUM_CLASSES
 from xai_detect import CKPT, DEVICE
+import camera_view
 from relu_surrogate import swap_relu
 from attrib_diff import magnitude
 from feat_diff import features_t
@@ -120,27 +121,51 @@ def clean_refs(model, xb, yb):
 
 
 def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
-               steps=200, alpha=1 / 255, kappa=2.0, bs=64, trace=None):
+               steps=200, alpha=1 / 255, kappa=2.0, bs=64, trace=None,
+               view=False, eot=1):
     """ADV2 / AdvEdge with the authors' PGD procedure: `pre_steps` sign steps on
     the classifier loss, weighted by the edge map if `edge` is set, then `steps`
     unweighted sign steps on classifier loss plus stealth terms. Keeps the
     misclassified iterate with the lowest stealth term. `trace`, if a list,
-    collects the mean stealth term of each phase-2 step (first batch)."""
+    collects the mean stealth term of each phase-2 step (first batch).
+    view=True averages each gradient over `eot` random camera views, as in
+    blind_attack."""
     out = []
     for i in range(0, len(x), bs):
         xb = x[i:i + bs].to(DEVICE)
         yb = y[i:i + bs].to(DEVICE)
         n = len(xb)
         E = edge_weights(xb, edge) if edge else 1.0
-        ref = clean_refs(model, xb, yb)
+        ref = None if view else clean_refs(model, xb, yb)
         xa = xb.clone()
 
         def project(v):
             return (xb + (v - xb).clamp(-eps, eps)).clamp(0, 1)
 
+        def objective(xa, stealth):
+            """Loss, mean stealth term and misclassified mask, over views."""
+            loss, term_m, hits = 0.0, torch.zeros(n, device=DEVICE), 0
+            for _ in range(eot):
+                xv, ref_v = xa, ref
+                if view:
+                    p = camera_view.sample(n)
+                    xv = camera_view.apply(xa, p)
+                    if stealth:
+                        ref_v = clean_refs(model, camera_view.apply(xb, p), yb)
+                logits = model(xv)
+                loss = loss + cw_margin(logits, yb, kappa).sum() / eot
+                if stealth:
+                    term = stealth_terms(model, xv, logits.argmax(1).detach(),
+                                         ref_v, w, sd_x, sd_p)
+                    loss = loss + term.sum() / eot
+                    term_m = term_m + term.detach() / eot
+                hits = hits + (logits.argmax(1) != yb).float()
+            mis = hits * 2 >= eot if view else hits > 0
+            return loss, term_m, mis
+
         for _ in range(pre_steps):
             xa.requires_grad_(True)
-            loss = cw_margin(model(xa), yb, kappa).sum()
+            loss, _, _ = objective(xa, False)
             g, = torch.autograd.grad(loss, xa)
             xa = project(xa.detach() - E * alpha * g.sign())
 
@@ -148,16 +173,12 @@ def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
         best = torch.full((n,), float("inf"), device=DEVICE)
         for _ in range(steps):
             xa.requires_grad_(True)
-            logits = model(xa)
-            term = stealth_terms(model, xa, logits.argmax(1).detach(), ref, w,
-                                 sd_x, sd_p)
-            loss = cw_margin(logits, yb, kappa).sum() + term.sum()
+            loss, term, mis = objective(xa, True)
             if trace is not None and i == 0:
                 trace.append(term.mean().item())
             g, = torch.autograd.grad(loss, xa)
             with torch.no_grad():
-                mis = logits.argmax(1) != yb
-                cand = torch.where(mis, term.detach(),
+                cand = torch.where(mis, term,
                                    torch.full_like(best, float("inf")))
                 better = cand < best
                 best = torch.where(better, cand, best)
@@ -172,11 +193,17 @@ def pgd_attack(model, x, y, eps, w, sd_x, sd_p, edge=None, pre_steps=200,
 
 def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
                  kappa=2.0, bs=64, warm=0.4, restarts=2, seed=0,
-                 keep_best=True, trace=None):
+                 keep_best=True, trace=None, view=False, eot=1,
+                 view_ref=True):
     """CW margin plus the weighted stealth terms. Never queries a detector:
     candidates are ranked by the attack's own objective. keep_best=False
     returns the final iterate of the last restart instead (ablation). `trace`,
-    if a list, collects the mean stealth term per step (first batch and restart)."""
+    if a list, collects the mean stealth term per step (first batch and restart).
+    view=True averages the objective over `eot` random camera views per step
+    (Expectation over Transformation); each attacked view's maps are compared
+    with the same view of the clean image (view_ref=False compares them with
+    the clean image itself, the naive EOT ablation), and an iterate counts as
+    misclassified when at least half its views are."""
     warm_steps = int(warm * steps)
     active = any(v > 0 for v in w.values())
     out = []
@@ -184,7 +211,7 @@ def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
         xb = x[i:i + bs].to(DEVICE)
         yb = y[i:i + bs].to(DEVICE)
         H, n = xb.shape[-1], len(xb)
-        ref = clean_refs(model, xb, yb)
+        ref = None if view and view_ref else clean_refs(model, xb, yb)
 
         best_z = torch.zeros(n, 3, H, H, device=DEVICE)
         best = torch.full((n,), float("inf"), device=DEVICE)
@@ -199,20 +226,33 @@ def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
             opt = torch.optim.Adam([z], lr=lr)
 
             for step in range(steps):
-                x_adv = (xb + eps * torch.tanh(z)).clamp(0, 1)
-                logits = model(x_adv)
-                loss = cw_margin(logits, yb, kappa).sum()
-                rank = None
-                if active and step >= warm_steps:
-                    term = stealth_terms(model, x_adv, logits.argmax(1).detach(),
-                                         ref, w, sd_x, sd_p)
-                    loss = loss + term.sum()
-                    rank = term.detach()
-                    if trace is not None and i == 0 and r == 0:
-                        trace.append(term.mean().item())
+                stealth = active and step >= warm_steps
+                rank = torch.zeros(n, device=DEVICE) if stealth else None
+                hits = torch.zeros(n, device=DEVICE)
+                opt.zero_grad(set_to_none=True)
+                for _ in range(eot):
+                    x_adv = (xb + eps * torch.tanh(z)).clamp(0, 1)
+                    ref_v = ref
+                    if view:
+                        p = camera_view.sample(n)
+                        x_adv = camera_view.apply(x_adv, p)
+                        if stealth and view_ref:
+                            ref_v = clean_refs(model, camera_view.apply(xb, p), yb)
+                    logits = model(x_adv)
+                    loss = cw_margin(logits, yb, kappa).sum()
+                    if stealth:
+                        term = stealth_terms(model, x_adv,
+                                             logits.argmax(1).detach(),
+                                             ref_v, w, sd_x, sd_p)
+                        loss = loss + term.sum()
+                        rank += term.detach() / eot
+                    hits += (logits.argmax(1) != yb).float()
+                    (loss / eot).backward()
+                if stealth and trace is not None and i == 0 and r == 0:
+                    trace.append(rank.mean().item())
 
                 with torch.no_grad():
-                    mis = logits.argmax(1) != yb
+                    mis = hits * 2 >= eot if view else hits > 0
                     s = rank if rank is not None \
                         else torch.full((n,), 1e3, device=DEVICE)
                     cand = torch.where(mis, s, torch.full_like(s, float("inf")))
@@ -221,8 +261,6 @@ def blind_attack(model, x, y, eps, w, sd_x, sd_p, steps=100, lr=0.08,
                     best_z[better] = z.detach()[better]
                     seen |= mis
 
-                opt.zero_grad(set_to_none=True)
-                loss.backward()
                 opt.step()
 
             with torch.no_grad():
